@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dleplugin>
+    <name>DLE simple forum</name>
+    <description>Простой форум средствами DLE</description>
+    <icon></icon>
+    <version>0.33</version>
+    <dleversion>18</dleversion>
+    <versioncompare>greater</versioncompare>
+    <upgradeurl></upgradeurl>
+    <filedelete>0</filedelete>
+    <needplugin></needplugin>
+    <mnotice>1</mnotice>
+    <mysqlinstall><![CDATA[ALTER TABLE `{prefix}_category` ADD `is_forum_cat` TINYINT(1) NOT NULL DEFAULT '0' AFTER `disable_comments`;
+ALTER TABLE `{prefix}_post_extras` ADD `last_comm` DATETIME NOT NULL AFTER `need_pass`;
+ALTER TABLE `{prefix}_post_extras` ADD `last_comm_autor` VARCHAR(40) NOT NULL AFTER `last_comm`;]]></mysqlinstall>
+    <mysqlupgrade><![CDATA[]]></mysqlupgrade>
+    <mysqlenable><![CDATA[]]></mysqlenable>
+    <mysqldisable><![CDATA[]]></mysqldisable>
+    <mysqldelete><![CDATA[ALTER TABLE `{prefix}_category` DROP `is_forum_cat`;
+ALTER TABLE `{prefix}_post_extras` DROP `last_comm`;
+ALTER TABLE `{prefix}_post_extras` DROP `last_comm_autor`;]]></mysqldelete>
+    <phpinstall><![CDATA[]]></phpinstall>
+    <phpupgrade><![CDATA[$category_res = $db->super_query("SELECT * FROM `" . PREFIX . "_category`");
+if (!isset($category_res['is_forum_cat'])) {
+    $db->query( "ALTER TABLE `" . PREFIX . "_category` ADD `is_forum_cat` TINYINT(1) NOT NULL DEFAULT '0'" );
+}
+$post_extras = $db->super_query("SELECT * FROM `" . PREFIX . "_post_extras`");
+if (!isset($post_extras['last_comm'])) {
+    $db->query( "ALTER TABLE `" . PREFIX . "_post_extras` ADD `last_comm` DATETIME NOT NULL" );
+}
+if (!isset($post_extras['last_comm_autor'])) {
+    $db->query( "ALTER IGNORE TABLE `" . PREFIX . "_post_extras` ADD `last_comm_autor` VARCHAR(40) NOT NULL" );
+}]]></phpupgrade>
+    <phpenable><![CDATA[]]></phpenable>
+    <phpdisable><![CDATA[]]></phpdisable>
+    <phpdelete><![CDATA[]]></phpdelete>
+    <notice><![CDATA[Исправления для DLE 18:
+- Устранение ошибок совместимости с PHP 8.3.
+- Исправление проблем с передачей массивов вместо mysqli_result.
+- Добавление проверок типов данных и экранирование входных данных.]]></notice>
+    <file name="engine/classes/templates.class.php">
+        <operation action="after">
+            <searchcode><![CDATA[		$template = str_replace( "{icon}", $row['icon'], $template );]]></searchcode>
+            <replacecode><![CDATA[		$template = str_replace( "{description}", $row['fulldescr'], $template );]]></replacecode>
+            <searchcount>1</searchcount>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/modules/addnews.php">
+        <operation action="before">
+            <searchcode><![CDATA[		$tpl->load_template( 'addnews.tpl' );]]></searchcode>
+            <replacecode><![CDATA[		if (isset($_GET['forum']) && $_GET['forum']) {
+            $tpl->load_template( 'modules/forum/addtopic.tpl' );
+        } else]]></replacecode>
+            <searchcount>1</searchcount>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, votes, user_id]]></searchcode>
+            <replacecode><![CDATA[, last_comm, last_comm_autor]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, '{$add_vote}','{$member_id['user_id']}']]></searchcode>
+            <replacecode><![CDATA[, '{$thistime}', '{$member_id['name']}']]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="replace">
+            <searchcode><![CDATA[if( $categories_default ) {
+            $add_url = "<a href=\"{$PHP_SELF}?do=addnews&amp;category={$categories_default}\">{$lang['add_noch']}</a>";
+        } elseif ($config['allow_alt_url']) {
+            $add_url = "<a href=\"{$config['http_home_url']}addnews.html\">{$lang['add_noch']}</a>";
+        } else $add_url = "<a href=\"{$PHP_SELF}?do=addnews\">{$lang['add_noch']}</a>";]]></searchcode>
+            <replacecode><![CDATA[			if (isset($_GET['forum']) && $_GET['forum']) {
+                  if (isset($_SESSION['from_forum'])) {
+                  $to_forum = $config['http_home_url'].$_SESSION['from_forum'];
+                } else {
+                  $to_forum = $config['http_home_url'];
+                }			   
+                msgbox( 'Тема успешно создана', "Вы создали новую тему. <a href=\"{$to_forum}\">Вернуться</a>." );
+            } else {
+                if( $categories_default ) {
+                    $add_url = "<a href=\"{$PHP_SELF}?do=addnews&amp;category={$categories_default}\">{$lang['add_noch']}</a>";
+                } elseif ($config['allow_alt_url']) {
+                    $add_url = "<a href=\"{$config['http_home_url']}addnews.html\">{$lang['add_noch']}</a>";
+                } else $add_url = "<a href=\"{$PHP_SELF}?do=addnews\">{$lang['add_noch']}</a>";
+                msgbox( $lang['add_ok'], "{$msg} {$add_url} {$lang['add_or']} <a href=\"{$config['http_home_url']}\">{$lang['all_prev']}</a>" );
+            }]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/inc/categories.php">
+        <operation action="after">
+            <searchcode><![CDATA[$disable_comments = isset($_POST['disable_comments']) ? intval($_POST['disable_comments']) : 0;]]></searchcode>
+            <replacecode><![CDATA[$is_forum_cat = isset($_POST['is_forum_cat']) ? intval($_POST['is_forum_cat']) : 0;]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, disable_main, disable_rating, disable_comments]]></searchcode>
+            <replacecode><![CDATA[, is_forum_cat]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, disable_rating='{$disable_rating}', disable_comments='{$disable_comments}']]></searchcode>
+            <replacecode><![CDATA[, is_forum_cat='$is_forum_cat']]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[if( $row['disable_rating'] ) $ifch4 = "checked"; else $ifch4 = "";]]></searchcode>
+            <replacecode><![CDATA[if( $row['is_forum_cat'] ) $ifch5 = "checked"; else $ifch5 = "";]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[<div class="col-sm-6"><div class="checkbox"><label><input class="icheck" type="checkbox" name="disable_search" value="1" {$ifch}>{$lang['cat_d_search']}</label></div></div>
+            </div>]]></searchcode>
+            <replacecode><![CDATA[<div class="row">
+                <div class="col-sm-6" style="max-width:300px;"><div class="checkbox"><label><input class="icheck" type="checkbox" name="is_forum_cat" value="1" {$ifch5}>Эта категория принадлежит форуму</label></div></div>
+            </div>]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, disable_rating='{$disable_rating}', disable_comments='{$disable_comments}']]></searchcode>
+            <replacecode><![CDATA[, is_forum_cat='$is_forum_cat']]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, "title", "comm_num"]]></searchcode>
+            <replacecode><![CDATA[, "last_comm"]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[<option value="comm_num">{$lang['opt_sys_scnum']}</option>]]></searchcode>
+            <replacecode><![CDATA[<option value="last_comm">По дате последнего комментария</option>]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[, "title" => $lang['opt_sys_salph'], "comm_num" => $lang['opt_sys_scnum']]]></searchcode>
+            <replacecode><![CDATA[, "last_comm" => 'По дате последнего комментария']]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/modules/show.short.php">
+        <operation action="replace">
+            <searchcode><![CDATA[$sql_result = $db->query( $sql_select );]]></searchcode>
+            <replacecode><![CDATA[if ($cat_info[$category_id]['is_forum_cat'] == 1 ) {
+  $is_forum = true;
+  if ($cat_info[$category_id]['parentid'] == 0) {
+    $is_main_forum = true;
+    $tpl->load_template( 'modules/forum/main.tpl' );
+    $tpl->compile('content');
+  }
+  else $is_main_forum = false;
+} else $is_forum = false;
+if ($is_main_forum) {
+    $sql_result = false; // Вместо массива используем false
+} else {
+    $sql_result = $db->query( $sql_select );
+}]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[$tpl->set_block( "'\\[not-news\\](.*?)\\[/not-news\\]'si", "" );]]></searchcode>
+            <replacecode><![CDATA[        $tpl->set_block( "'\\[before\\](.*?)\\[/before\\]'si", "" );
+        $tpl->set_block( "'\\[after\\](.*?)\\[/after\\]'si", "" );]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[if ( $config['allow_banner'] AND count($banner_in_news) AND !$view_template ){
+        foreach ( $banner_in_news as $name) {
+            $tpl->result['content'] = str_replace( "{banner_" . $name . "}", $banners[$name], $tpl->result['content'] );
+            if( $banners[$name] ) {
+                $tpl->result['content'] = str_replace ( "[banner_" . $name . "]", "", $tpl->result['content'] );
+                $tpl->result['content'] = str_replace ( "[/banner_" . $name . "]", "", $tpl->result['content'] );
+            }
+        }
+        $tpl->result['content'] = preg_replace( "'\\[banner_(.*?)\\](.*?)\\[/banner_(.*?)\\]'si", '', $tpl->result['content'] );
+    } elseif ( $view_template ) {
+        $tpl->result['content'] = preg_replace( "'{banner_(.*?)}'si", '', $tpl->result['content'] );
+        $tpl->result['content'] = preg_replace( "'\\[banner_(.*?)\\](.*?)\\[/banner_(.*?)\\]'si", '', $tpl->result['content'] );
+    }]]></searchcode>
+            <replacecode><![CDATA[if( preg_match( "'\\[after\\](.*?)\\[/after\\]'si", $tpl->copy_template, $match ) ) {
+        $tpl->result['content'] .= $match[1];
+    }]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[$tpl->result['content'] = str_ireplace( "{PAGEBREAK}", '', $tpl->result['content'] );]]></searchcode>
+            <replacecode><![CDATA[if ($is_forum && session_status() === PHP_SESSION_ACTIVE) {
+    $_SESSION['from_forum'] = ltrim($_SERVER['REQUEST_URI'], '/');
+}
+if($config['allow_alt_url']) {
+        $tpl->result['content'] = str_replace('{add-topic-link}', '/addtopic.html/'.$category_id.'/', $tpl->result['content']);
+    } else {
+        $tpl->result['content'] = str_replace('{add-topic-link}', '/index.php?do=addnews&forum=1&category='.$category_id, $tpl->result['content']);
+    }]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="before">
+            <searchcode><![CDATA[$need_404 = true;]]></searchcode>
+            <replacecode><![CDATA[if ($cat_info[$category_id]['is_forum_cat'] != 1)]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="before">
+            <searchcode><![CDATA[if( !$news_found AND !$allow_userinfo AND $do != 'newposts' AND $do != 'favorites') {]]></searchcode>
+            <replacecode><![CDATA[	if (($news_found OR $is_forum) AND $do != 'newposts' AND $do != 'favorites') {
+        if (preg_match( "'\\[before\\](.*?)\\[/before\\]'si", $tpl->copy_template, $match )) {
+            $tpl->result['content'] = $match[1].$tpl->result['content'];
+        }
+    }
+]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[$row['date'] = strtotime( $row['date'] );]]></searchcode>
+            <replacecode><![CDATA[$row['last_comm'] = strtotime( $row['last_comm'] );]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[if( date( 'Ymd', $row['date'] ) == date( 'Ymd', $_TIME ) ) {
+            $tpl->set( '{date}', $lang['time_heute'] . langdate( ", H:i", $row['date'], $short_news_cache ) );
+        } elseif( date( 'Ymd', $row['date'] ) == date( 'Ymd', ($_TIME - 86400) ) ) {
+            $tpl->set( '{date}', $lang['time_gestern'] . langdate( ", H:i", $row['date'], $short_news_cache ) );
+        } else {
+            $tpl->set( '{date}', langdate( $config['timestamp_active'], $row['date'], $short_news_cache ) );
+        }]]></searchcode>
+            <replacecode><![CDATA[if( date( 'Ymd', $row['last_comm'] ) == date( 'Ymd', $_TIME ) ) {
+            $tpl->set( '{last_comm_date}', $lang['time_heute'] . langdate( ", H:i", $row['last_comm'], $short_news_cache ) );
+        } elseif( date( 'Ymd', $row['last_comm'] ) == date( 'Ymd', ($_TIME - 86400) ) ) {
+            $tpl->set( '{last_comm_date}', $lang['time_gestern'] . langdate( ", H:i", $row['last_comm'], $short_news_cache ) );
+        } else {
+            $tpl->set( '{last_comm_date}', langdate( $config['timestamp_active'], $row['last_comm'], $short_news_cache ) );
+        }]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[$tpl->copy_template = preg_replace_callback ( "#\{date=(.+?)\}#i", "formdate", $tpl->copy_template );]]></searchcode>
+            <replacecode><![CDATA[$tpl->copy_template = preg_replace_callback ( "#\{last_comm_date=(.+?)\}#i", "formdate", $tpl->copy_template );]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[$tpl->set( '{login}', $row['autor'] );]]></searchcode>
+            <replacecode><![CDATA[$tpl->set( '{last_comm_autor}', $row['last_comm_autor'] );
+]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/modules/show.full.php">
+        <operation action="after">
+            <searchcode><![CDATA[$tpl->set( '{login}', $row['autor'] );]]></searchcode>
+            <replacecode><![CDATA[if ($cat_info[$cat_list[0]]['is_forum_cat'] == 1) {
+            $avatar = $db->super_query("SELECT foto FROM ".PREFIX."_users WHERE name='{$db->safesql($row['autor'])}'");
+            if($avatar['foto']) $tpl->set('{avatar}', $avatar['foto']);
+            else $tpl->set('{avatar}', "{THEME}/dleimages/noavatar.png");
+        }]]></replacecode>
+            <searchcount>1</searchcount>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/modules/addcomments.php">
+        <operation action="replace">
+            <searchcode><![CDATA[if( $where_approve ) $db->query( "UPDATE " . PREFIX . "_post SET comm_num=comm_num+1 WHERE id='{$post_id}'" );]]></searchcode>
+            <replacecode><![CDATA[if( $where_approve ) {
+                $db->query( "UPDATE " . PREFIX . "_post SET comm_num=comm_num+1 WHERE id='{$post_id}'" );
+                $db->query( "UPDATE " . PREFIX . "_post_extras SET last_comm='{$db->safesql($time)}', last_comm_autor='{$db->safesql($name)}' WHERE news_id='{$post_id}'" );
+            }]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/ajax/editcomments.php">
+        <operation action="replace">
+            <searchcode><![CDATA[if( !$row['approve'] ) $db->query( "UPDATE " . PREFIX . "_post SET comm_num=comm_num+1 WHERE id='{$row['post_id']}'" );]]></searchcode>
+            <replacecode><![CDATA[if( !$row['approve'] ) {
+        $db->query( "UPDATE " . PREFIX . "_post SET comm_num=comm_num+1 WHERE id='{$row['post_id']}'" );
+        $db->query( "UPDATE " . PREFIX . "_post_extras SET last_comm='{$db->safesql($row['date'])}', last_comm_autor='{$db->safesql($row['autor'])}' WHERE news_id='{$row['post_id']}'" );
+    }]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/ajax/adminfunction.php">
+        <operation action="after">
+            <searchcode><![CDATA[$db->query( "UPDATE " . PREFIX . "_post SET comm_num=comm_num+1 WHERE id='{$post_id}'" );]]></searchcode>
+            <replacecode><![CDATA[$db->query( "UPDATE " . PREFIX . "_post_extras SET last_comm='{$db->safesql($_TIME)}', last_comm_autor='{$db->safesql($row['autor'])}' WHERE news_id='{$post_id}'" );]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/inc/cmoderation.php">
+        <operation action="after">
+            <searchcode><![CDATA[$db->query( "UPDATE " . PREFIX . "_post SET comm_num=comm_num+1 WHERE id='{$post_id}'" );]]></searchcode>
+            <replacecode><![CDATA[$db->query( "UPDATE " . PREFIX . "_post_extras SET last_comm='{$db->safesql($_TIME)}' WHERE news_id='{$post_id}'" );]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+    <file name="engine/engine.php">
+        <operation action="after">
+            <searchcode><![CDATA[e.news_read, e.allow_rate, e.rating, e.vote_num]]></searchcode>
+            <replacecode><![CDATA[, e.last_comm, e.last_comm_autor]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+        <operation action="after">
+            <searchcode><![CDATA[elseif ($do == 'stats') $nam_e = $lang['title_stats'];]]></searchcode>
+            <replacecode><![CDATA[elseif ($do == 'addnews' && isset($_GET['forum']) && $_GET['forum'] == 1) $nam_e = 'Добавление темы на форум';]]></replacecode>
+            <enabled>1</enabled>
+        </operation>
+    </file>
+</dleplugin>
