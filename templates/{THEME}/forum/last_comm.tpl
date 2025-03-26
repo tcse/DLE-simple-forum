@@ -1,0 +1,1 @@
+<nobr>{date}</nobr><br>от {author} <a href="{news-link}"><i class="far fa-caret-square-right"></i></a>
